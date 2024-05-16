@@ -29,7 +29,7 @@ def main(args):
     # Make a validation set
     if not args.test:
     ### WRITE YOUR CODE HERE
-        print("Using PCA")
+        ...
 
     ### WRITE YOUR CODE HERE to do any other data processing
 
