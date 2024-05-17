@@ -149,7 +149,7 @@ class Trainer(object):
         self.batch_size = batch_size
 
         self.criterion = nn.CrossEntropyLoss()
-        self.optimizer = ...  ### WRITE YOUR CODE HERE
+        self.optimizer = torch.optim.SGD(params=model.parameters(), lr=lr)  ### WRITE YOUR CODE HERE
 
     def train_all(self, dataloader):
         """
@@ -163,8 +163,8 @@ class Trainer(object):
         """
         for ep in range(self.epochs):
             self.train_one_epoch(dataloader)
-
             ### WRITE YOUR CODE HERE if you want to do add something else at each epoch
+
 
     def train_one_epoch(self, dataloader, ep):
         """
@@ -181,6 +181,7 @@ class Trainer(object):
         #### WRITE YOUR CODE HERE!
         ###
         ##
+
 
     def predict_torch(self, dataloader):
         """
