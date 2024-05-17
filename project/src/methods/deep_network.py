@@ -13,7 +13,7 @@ class MLP(nn.Module):
     It should not use any convolutional layers.
     """
 
-    def __init__(self, input_size, n_classes):
+    def __init__(self, input_size, n_classes, hidden_layers=(512, 256, 128)):
         """
         Initialize the network.
         
@@ -25,11 +25,18 @@ class MLP(nn.Module):
             n_classes (int): number of classes to predict
         """
         super().__init__()
-        self.fc1 = nn.Linear(input_size, 512)
-        self.fc2 = nn.Linear(512, 256)
-        self.fc3 = nn.Linear(256, 128)
-        self.fc4 = nn.Linear(128, n_classes)
-
+        in_size = input_size
+    
+        # create a list containing all layers including hidden ones
+        layers = []
+        for out_size in hidden_layers:
+            layers.append(nn.Linear(in_size, out_size)) # add layer
+            layers.append(nn.ReLU())
+            in_size = out_size
+            
+        layers.append(nn.Linear(in_size, n_classes)) # append the final layer 
+        self.mlp_model = nn.Sequential(*layers) 
+    
     def forward(self, x):
         """
         Predict the class of a batch of samples with the model.
@@ -40,11 +47,8 @@ class MLP(nn.Module):
             preds (tensor): logits of predictions of shape (N, C)
                 Reminder: logits are value pre-softmax.
         """
+        x = self.mlp_model(x)
 
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = F.relu(self.fc3(x))
-        x = self.fc4(x)
         return x
 
 
@@ -55,7 +59,7 @@ class CNN(nn.Module):
     It should use at least one convolutional layer.
     """
 
-    def __init__(self, input_channels, n_classes):
+    def __init__(self, input_channels, n_classes, filters=(6, 16), hidden_layers=(120, 50, 15), image_size=28):
         """
         Initialize the network.
         
@@ -67,12 +71,29 @@ class CNN(nn.Module):
             n_classes (int): number of classes to predict
         """
         super().__init__()
-        self.conv2d1 = nn.Conv2d(input_channels, 6, kernel_size=3, padding=1)
-        self.conv2d2 = nn.Conv2d(6, 16, kernel_size=3, padding=1)
-        self.fc1 = nn.Linear(7 * 7 * 16, 120)
-        self.fc2 = nn.Linear(120, 50)
-        self.fc3 = nn.Linear(15, n_classes)
+        in_channels = input_channels
+        conv_layers = []
 
+        final_size = image_size
+        for out_channels in filters:
+            conv_layers.append(nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)) # perform convolution
+            conv_layers.append(nn.ReLU()) # apply activation function
+            conv_layers.append(nn.MaxPool2d(kernel_size=2)) # apply max pooling reducing dimension 
+            in_channels = out_channels
+            final_size = final_size // 2 # final dimension divided by two because of max pooling 
+
+        self.convolution_model = nn.Sequential(*conv_layers) # convolution model is ready 
+
+        in_size = in_channels * final_size * final_size # input size is the flattened version of the convolutions output
+        mlp_layers = []
+        for out_size in hidden_layers:
+            mlp_layers.append(nn.Linear(in_size, out_size)) # add layer
+            mlp_layers.append(nn.ReLU()) # apply actvation function
+            in_size = out_size
+        mlp_layers.append(nn.Linear(in_size, n_classes))
+
+        self.mlp_model = nn.Sequential(*mlp_layers) # mlp model is ready
+        
     def forward(self, x):
         """
         Predict the class of a batch of samples with the model.
@@ -83,11 +104,11 @@ class CNN(nn.Module):
             preds (tensor): logits of predictions of shape (N, C)
                 Reminder: logits are value pre-softmax.
         """
-        x = F.max_pool2d(F.relu(self.conv2d1(x)), 2)
-        x = F.max_pool2d(F.relu(self.conv2d2(x)), 2)
+
+        x = self.convolution_model(x)
         x = x.reshape((x.shape[0], -1))
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
+        x = self.mlp_model(x)
+
         return x
 
 

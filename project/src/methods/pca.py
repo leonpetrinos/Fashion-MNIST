@@ -78,6 +78,8 @@ class PCA(object):
         #### WRITE YOUR CODE HERE!
         ###
         ##
-        return ...
+
+        centered = data - self.mean
+        return centered @ self.W
         
 
