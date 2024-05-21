@@ -2,9 +2,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import TensorDataset, DataLoader
+import numpy as np
 
 ## MS2
 
+##############################################################################################################################
+##############################################################################################################################
 
 class MLP(nn.Module):
     """
@@ -51,6 +54,8 @@ class MLP(nn.Module):
 
         return x
 
+##############################################################################################################################
+##############################################################################################################################
 
 class CNN(nn.Module):
     """
@@ -106,11 +111,34 @@ class CNN(nn.Module):
         """
 
         x = self.convolution_model(x)
-        x = x.reshape((x.shape[0], -1))
+        x = torch.flatten(x, 1)
         x = self.mlp_model(x)
 
         return x
+    
 
+##############################################################################################################################
+##############################################################################################################################
+
+class MyViTBlock(nn.Module):
+    def __init__(self, hidden_d, n_heads, mlp_ratio=4):
+        super().__init__()
+        self.hidden_d = hidden_d
+        self.n_heads = n_heads
+
+        self.norm1 = nn.LayerNorm(hidden_d)
+        self.mhsa = nn.MultiheadAttention(hidden_d, n_heads)
+        self.norm2 = nn.LayerNorm(hidden_d)
+        self.mlp = nn.Sequential(
+            nn.Linear(hidden_d, mlp_ratio * hidden_d),
+            nn.GELU(),
+            nn.Linear(mlp_ratio * hidden_d, hidden_d)
+        )
+
+    def forward(self, x):
+        out = x + self.mhsa(self.norm1(x))
+        out = out + self.mlp(self.norm2(out))
+        return out
 
 class MyViT(nn.Module):
     """
@@ -123,11 +151,37 @@ class MyViT(nn.Module):
         
         """
         super().__init__()
-        ##
-        ###
-        #### WRITE YOUR CODE HERE!
-        ###
-        ##
+
+        # Attributes
+        self.chw = chw # (C, H, W)
+        self.n_patches = n_patches
+        self.n_blocks = n_blocks
+        self.n_heads = n_heads
+        self.hidden_d = hidden_d
+
+        # Input and patches sizes
+        assert chw[1] % n_patches == 0, "Input shape not entirely divisible by number of patches"
+        assert chw[2] % n_patches == 0, "Input shape not entirely divisible by number of patches"
+        self.patch_size = (chw[1] / n_patches, chw[2] / n_patches)
+
+        # Linear mapper
+        self.input_d = int(chw[0] * self.patch_size[0] * self.patch_size[1])
+        self.linear_mapper = nn.Linear(self.input_d, self.hidden_d)
+
+        # Learnable classification token
+        self.class_token = nn.Parameter(torch.rand(1, self.hidden_d))
+
+        # Positional embedding
+        self.positional_embeddings = self.get_positional_embeddings(n_patches ** 2 + 1, hidden_d) 
+
+        # Transformer blocks
+        self.blocks = nn.ModuleList([MyViTBlock(hidden_d, n_heads) for _ in range(n_blocks)])
+
+        # Classification MLP
+        self.mlp = nn.Sequential(
+            nn.Linear(self.hidden_d, out_d),
+            nn.Softmax(dim=-1)
+        )
 
     def forward(self, x):
         """
@@ -139,13 +193,63 @@ class MyViT(nn.Module):
             preds (tensor): logits of predictions of shape (N, C)
                 Reminder: logits are value pre-softmax.
         """
-        ##
-        ###
-        #### WRITE YOUR CODE HERE!
-        ###
-        ##
-        return preds
+        n, c, h, w = x.shape
 
+        # Divide images into patches.
+        patches = self.patchify(x, self.n_patches) 
+
+        # Map the vector corresponding to each patch to the hidden size dimension.
+        tokens = self.linear_mapper(patches) 
+
+        # Add classification token to the tokens.
+        tokens = torch.cat((self.class_token.expand(n, 1, -1), tokens), dim=1)
+
+        # Add positional embedding.
+        out =  tokens + self.positional_embeddings.repeat(n, 1, 1)
+
+        # Transformer Blocks
+        for block in self.blocks:
+            out = block(out)
+
+        # Get the classification token only.
+        out = out[:, 0]
+
+        # Map to the output distribution.
+        out = self.mlp(out) 
+
+        return out
+
+    def patchify(images, n_patches):
+        n, c, h, w = images.shape
+
+        assert h == w # We assume square image.
+
+        patches = torch.zeros(n, n_patches ** 2, h * w * c // n_patches ** 2)
+        patch_size = h // n_patches 
+
+        for idx, image in enumerate(images):
+            for i in range(n_patches):
+                for j in range(n_patches):
+                    # Extract the patch of the image.
+                    patch = image[:, i * patch_size: (i + 1) * patch_size, j * patch_size: (j + 1) * patch_size] 
+                    # Flatten the patch and store it.
+                    patches[idx, i * n_patches + j] = patch.flatten() 
+
+        return patches
+
+    def get_positional_embeddings(sequence_length, d):
+        result = torch.ones(sequence_length, d)
+        for i in range(sequence_length):
+            for j in range(d):
+                if j % 2 == 0:
+                    result[i, j] = np.sin(i / (10000 ** (j / d)))
+                else:
+                    result[i, j] = np.cos(i / (10000 ** ((j - 1) / d)))
+        return result
+
+
+##############################################################################################################################
+##############################################################################################################################
 
 class Trainer(object):
     """
@@ -170,7 +274,8 @@ class Trainer(object):
         self.batch_size = batch_size
 
         self.criterion = nn.CrossEntropyLoss()
-        self.optimizer = torch.optim.SGD(params=model.parameters(), lr=lr)  ### WRITE YOUR CODE HERE
+        if isinstance(model, MyViT): self.optimizer = torch.optim.Adam(params=model.parameters(), lr=lr) 
+        else: self.optimizer = torch.optim.SGD(params=model.parameters(), lr=lr)
 
     def train_all(self, dataloader):
         """
@@ -197,6 +302,8 @@ class Trainer(object):
         Arguments:
             dataloader (DataLoader): dataloader for training data
         """
+
+        
         ##
         ###
         #### WRITE YOUR CODE HERE!
