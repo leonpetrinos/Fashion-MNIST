@@ -26,22 +26,58 @@ def main(args):
     ## 2. Then we must prepare it. This is were you can create a validation set,
     #  normalize, add bias, etc.
 
+    ## Normalizing the data
+    mean = np.mean(xtrain, axis=0, keepdims=True)
+    std = np.std(xtrain, axis=0, keepdims=True)
+    xtrain = normalize_fn(xtrain, mean, std)
+    xtest = normalize_fn(xtest, mean, std) 
+    
+    # Appending the bias to the data
+    xtrain = append_bias_term(xtrain)
+    xtest = append_bias_term(xtest)
+
     # Make a validation set
     if not args.test:
-    ### WRITE YOUR CODE HERE
-        ...
+         validation_percentage = 0.2
+         N = xtrain.shape[0]
+         num_elements = int(N * validation_percentage)
+         indices = np.arange(N)
+
+         ### Shuffling the elements
+         np.random.permutation(indices)
+
+         ### validation indices & training_indices
+
+         valid_ind = indices[:num_elements]  # 20%
+         train_ind = indices[num_elements:]  # 80%
+
+         x_train_copy = np.copy(xtrain)
+         y_train_copy = np.copy(ytrain)
+
+         xtrain, xtest = xtrain[train_ind], x_train_copy[valid_ind]
+         ytrain, ytest = ytrain[train_ind], y_train_copy[valid_ind]
 
     ### WRITE YOUR CODE HERE to do any other data processing
-
 
     # Dimensionality reduction (MS2)
     if args.use_pca:
         print("Using PCA")
         pca_obj = PCA(d=args.pca_d)
+        variance = pca_obj.find_principal_components(xtrain)
+        xtrain = pca_obj.reduce_dimension(xtrain)
+        xtest = pca_obj.reduce_dimension(xtest)
         ### WRITE YOUR CODE HERE: use the PCA object to reduce the dimensionality of the data
 
 
     ## 3. Initialize the method you want to use.
+
+    if args.model == MLP:
+        model = MLP(xtrain.shape[1],get_n_classes(ytrain)) ## Not sure about the xtrain.shape[1]
+    if args.model == CNN:
+        model = CNN(xtrain.shape[1], get_n_classes(ytrain))
+    if args.model == MyViT:
+        model = MyViT() ## Not sure about what to put here
+
 
     # Neural Networks (MS2)
 
