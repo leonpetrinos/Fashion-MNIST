@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import TensorDataset, DataLoader
 import numpy as np
+from utils import accuracy_fn
 
 ## MS2
 
@@ -289,8 +290,6 @@ class Trainer(object):
         """
         for ep in range(self.epochs):
             self.train_one_epoch(dataloader)
-            ### WRITE YOUR CODE HERE if you want to do add something else at each epoch
-
 
     def train_one_epoch(self, dataloader, ep):
         """
@@ -302,14 +301,30 @@ class Trainer(object):
         Arguments:
             dataloader (DataLoader): dataloader for training data
         """
+        self.model.train()
+        train_loss = 0.0
+        for it, batch in enumerate(dataloader):
+            # Load a batch, break it down in images and targets
+            x, y = batch
+            # Run forward pass
+            logits = self.model(x) 
+            # Compute loss 
+            loss = self.criterion(logits, y) 
+            # Run backward pass.
+            loss.backward() 
+            # Accumulate and average the training loss
+            train_loss += loss.detach().cpu().item() / len(dataloader)
+            # Update the weights
+            self.optimizer.step() 
+            # Zero-out the accumulated gradients.
+            self.model.zero_grad() 
 
-        
-        ##
-        ###
-        #### WRITE YOUR CODE HERE!
-        ###
-        ##
-
+            print('\rEp {}/{}, it {}/{}: loss train: {:.2f}, accuracy train: {:.2f}'.
+                  format(ep + 1, self.epochs, it + 1, len(dataloader), loss,
+                         accuracy_fn(logits, y)), end='')
+            
+        # Averaged training loss at the end of each epoch
+        print('\nEpoch {}/{}, Average Training Loss: {:.2f}'.format(ep + 1, self.epochs, train_loss))
 
     def predict_torch(self, dataloader):
         """
@@ -328,11 +343,24 @@ class Trainer(object):
             pred_labels (torch.tensor): predicted labels of shape (N,),
                 with N the number of data points in the validation/test data.
         """
-        ##
-        ###
-        #### WRITE YOUR CODE HERE!
-        ###
-        ##
+        
+        self.model.eval()
+        all_preds = []
+
+        with torch.no_grad():
+            acc_run = 0
+            for it, batch in enumerate(dataloader):
+                x, y = batch
+                curr_bs = x.shape[0]
+                logits = self.model(x)
+                preds = torch.argmax(logits, dim=1)
+                all_preds.append(preds)
+                acc_run += accuracy_fn(logits, y) * curr_bs
+
+            acc = acc_run / len(dataloader.dataset)
+            print(', accuracy test: {:.2f}'.format(acc))
+        
+        pred_labels = torch.cat(all_preds)
         return pred_labels
     
     def fit(self, training_data, training_labels):
