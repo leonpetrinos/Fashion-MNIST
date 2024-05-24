@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import TensorDataset, DataLoader
 import numpy as np
-from utils import accuracy_fn
+from ..utils import accuracy_fn
 
 ## MS2
 
