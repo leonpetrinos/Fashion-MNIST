@@ -361,12 +361,15 @@ class Trainer(object):
             # Zero-out the accumulated gradients.
             self.model.zero_grad() 
             
-            print('\rEp {}/{}, it {}/{}: loss train: {:.2f}, accuracy train: {:.2f}'.
-                  format(ep + 1, self.epochs, it + 1, len(dataloader), loss,
-                         accuracy(logits, y)), end='')
-            
-        # Averaged training loss at the end of each epoch
-        print('\nEpoch {}/{}, Average Training Loss: {:.2f}'.format(ep + 1, self.epochs, train_loss))
+            print(f'\rEpoch {ep + 1}/{self.epochs} | '
+                  f'Batch {it + 1}/{len(dataloader)} | '
+                  f'Loss: {loss:.4f} | '
+                  f'Accuracy: {accuracy(logits, y):.2f}%', end='')
+    
+        # Print averaged training loss at the end of each epoch
+        # print(f'\nEpoch {ep + 1}/{self.epochs} | Average Training Loss: {train_loss:.4f}')
+        print(f'\n{"-"*65}')
+        
 
     def predict_torch(self, dataloader):
         """
