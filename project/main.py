@@ -5,7 +5,7 @@ from torchinfo import summary
 
 from src.data import load_data
 from src.methods.pca import PCA
-from src.methods.deep_network import MLP, CNN, Trainer, MyViT
+from src.methods.deep_network import MLP, CNN, Trainer, MyViT, MyViTBlock
 from src.utils import normalize_fn, append_bias_term, accuracy_fn, macrof1_fn, get_n_classes
 
 
@@ -59,6 +59,7 @@ def main(args):
 
     ### WRITE YOUR CODE HERE to do any other data processing
 
+
     # Dimensionality reduction (MS2)
     if args.use_pca:
         print("Using PCA")
@@ -71,13 +72,6 @@ def main(args):
 
     ## 3. Initialize the method you want to use.
 
-    if args.model == MLP:
-        model = MLP(xtrain.shape[1],get_n_classes(ytrain)) ## Not sure about the xtrain.shape[1]
-    if args.model == CNN:
-        model = CNN(xtrain.shape[1], get_n_classes(ytrain))
-    if args.model == MyViT:
-        model = MyViT() ## Not sure about what to put here
-
 
     # Neural Networks (MS2)
 
@@ -85,7 +79,14 @@ def main(args):
     # Note: you might need to reshape the data depending on the network you use!
     n_classes = get_n_classes(ytrain)
     if args.nn_type == "mlp":
-        model = ... ### WRITE YOUR CODE HERE
+        model = MLP(xtrain.shape[1],get_n_classes(ytrain)) ### WRITE YOUR CODE HERE
+
+    elif args.nn_type == "cnn":
+        model = CNN(xtrain.shape[0], get_n_classes(ytrain))
+
+    elif args.nn_type == "transformer":
+        xtrain = xtrain.reshape(xtrain.shape[0], np.sqrt(xtrain.shape[1]), -1)
+        model = MyViT(xtrain.shape, n_patches=7, n_blocks=2, hidden_d=8, n_heads=2, out_d=get_n_classes(ytrain))
 
     summary(model)
 
