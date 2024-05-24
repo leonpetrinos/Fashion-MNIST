@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import TensorDataset, DataLoader
 import numpy as np
-from ..utils import accuracy_fn
+from ..utils import accuracy
 
 ## MS2
 
@@ -52,7 +52,6 @@ class MLP(nn.Module):
                 Reminder: logits are value pre-softmax.
         """
         x = self.mlp_model(x)
-
         return x
 
 ##############################################################################################################################
@@ -121,6 +120,49 @@ class CNN(nn.Module):
 ##############################################################################################################################
 ##############################################################################################################################
 
+class MyMSA(nn.Module):
+    def __init__(self, d, n_heads=2):
+        super(MyMSA, self).__init__()
+        self.d = d
+        self.n_heads = n_heads
+
+        assert d % n_heads == 0, f"Can't divide dimension {d} into {n_heads} heads"
+        d_head = int(d / n_heads)
+        self.d_head = d_head
+
+        self.q_mappings = nn.ModuleList([nn.Linear(d_head, d_head) for _ in range(self.n_heads)])
+        self.k_mappings = nn.ModuleList([nn.Linear(d_head, d_head) for _ in range(self.n_heads)])
+        self.v_mappings = nn.ModuleList([nn.Linear(d_head, d_head) for _ in range(self.n_heads)])
+
+        self.softmax = nn.Softmax(dim=-1)
+
+    def forward(self, sequences):
+        result = []
+        for sequence in sequences:
+            seq_result = []
+            for head in range(self.n_heads):
+
+                # Select the mapping associated to the given head.
+                q_mapping = self.q_mappings[head]
+                k_mapping = self.k_mappings[head]
+                v_mapping = self.v_mappings[head]
+
+                seq = sequence[:, head * self.d_head: (head + 1) * self.d_head]
+
+                # Map seq to q, k, v.
+                q, k, v = q_mapping(seq), k_mapping(seq), v_mapping(seq)
+
+                # Calculate attention scores
+                attention_scores = torch.matmul(q, k.transpose(-2, -1)) / (self.d_head ** 0.5)
+                
+                # Apply softmax to get attention weights
+                attention_weights = self.softmax(attention_scores)
+                
+                # Apply attention weights to the values
+                seq_result.append(torch.matmul(attention_weights, v))
+            result.append(torch.hstack(seq_result))
+        return torch.cat([torch.unsqueeze(r, dim=0) for r in result])
+
 class MyViTBlock(nn.Module):
     def __init__(self, hidden_d, n_heads, mlp_ratio=4):
         super().__init__()
@@ -128,7 +170,7 @@ class MyViTBlock(nn.Module):
         self.n_heads = n_heads
 
         self.norm1 = nn.LayerNorm(hidden_d)
-        self.mhsa = nn.MultiheadAttention(hidden_d, n_heads)
+        self.mhsa = MyMSA(hidden_d, n_heads)
         self.norm2 = nn.LayerNorm(hidden_d)
         self.mlp = nn.Sequential(
             nn.Linear(hidden_d, mlp_ratio * hidden_d),
@@ -220,7 +262,7 @@ class MyViT(nn.Module):
 
         return out
 
-    def patchify(images, n_patches):
+    def patchify(self, images, n_patches):
         n, c, h, w = images.shape
 
         assert h == w # We assume square image.
@@ -238,7 +280,7 @@ class MyViT(nn.Module):
 
         return patches
 
-    def get_positional_embeddings(sequence_length, d):
+    def get_positional_embeddings(self, sequence_length, d):
         result = torch.ones(sequence_length, d)
         for i in range(sequence_length):
             for j in range(d):
@@ -289,7 +331,7 @@ class Trainer(object):
             dataloader (DataLoader): dataloader for training data
         """
         for ep in range(self.epochs):
-            self.train_one_epoch(dataloader)
+            self.train_one_epoch(dataloader, ep)
 
     def train_one_epoch(self, dataloader, ep):
         """
@@ -309,7 +351,7 @@ class Trainer(object):
             # Run forward pass
             logits = self.model(x) 
             # Compute loss 
-            loss = self.criterion(logits, y) 
+            loss = self.criterion(logits, y.long()) 
             # Run backward pass.
             loss.backward() 
             # Accumulate and average the training loss
@@ -318,10 +360,10 @@ class Trainer(object):
             self.optimizer.step() 
             # Zero-out the accumulated gradients.
             self.model.zero_grad() 
-
+            
             print('\rEp {}/{}, it {}/{}: loss train: {:.2f}, accuracy train: {:.2f}'.
                   format(ep + 1, self.epochs, it + 1, len(dataloader), loss,
-                         accuracy_fn(logits, y)), end='')
+                         accuracy(logits, y)), end='')
             
         # Averaged training loss at the end of each epoch
         print('\nEpoch {}/{}, Average Training Loss: {:.2f}'.format(ep + 1, self.epochs, train_loss))
@@ -348,18 +390,11 @@ class Trainer(object):
         all_preds = []
 
         with torch.no_grad():
-            acc_run = 0
             for it, batch in enumerate(dataloader):
-                x, y = batch
-                curr_bs = x.shape[0]
-                logits = self.model(x)
+                logits = self.model(batch[0])
                 preds = torch.argmax(logits, dim=1)
                 all_preds.append(preds)
-                acc_run += accuracy_fn(logits, y) * curr_bs
 
-            acc = acc_run / len(dataloader.dataset)
-            print(', accuracy test: {:.2f}'.format(acc))
-        
         pred_labels = torch.cat(all_preds)
         return pred_labels
     

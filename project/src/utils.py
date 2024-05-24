@@ -78,6 +78,11 @@ def accuracy_fn(pred_labels, gt_labels):
     """
     return np.mean(pred_labels == gt_labels) * 100.
 
+def accuracy(x, y):
+    x = x.detach().cpu().numpy()
+    y = y.detach().cpu().numpy()
+    return np.mean(np.argmax(x, axis=1) == y) * 100
+
 def macrof1_fn(pred_labels, gt_labels):
     """Return the macro F1-score."""
     class_ids = np.unique(gt_labels)
