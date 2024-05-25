@@ -17,7 +17,7 @@ class MLP(nn.Module):
     It should not use any convolutional layers.
     """
 
-    def __init__(self, input_size, n_classes, hidden_layers=(512, 256, 128)):
+    def __init__(self, input_size, n_classes, hidden_layers=[512, 256, 128]):
         """
         Initialize the network.
         
@@ -64,7 +64,7 @@ class CNN(nn.Module):
     It should use at least one convolutional layer.
     """
 
-    def __init__(self, input_channels, n_classes, filters=(6, 16), hidden_layers=(120, 50, 15), image_size=28):
+    def __init__(self, input_channels, n_classes, filters=[6, 16], hidden_layers=[120, 84], image_size=28):
         """
         Initialize the network.
         
@@ -350,6 +350,9 @@ class Trainer(object):
             x, y = batch
             # Run forward pass
             logits = self.model(x) 
+
+            # logits = F.softmax(logits, dim=1) ## NOT SURE ABOUT THIS
+            
             # Compute loss 
             loss = self.criterion(logits, y.long()) 
             # Run backward pass.

@@ -2,12 +2,12 @@ import argparse
 
 import numpy as np
 from torchinfo import summary
+import torch
 
 from src.data import load_data
 from src.methods.pca import PCA
 from src.methods.deep_network import MLP, CNN, Trainer, MyViT, MyViTBlock
 from src.utils import normalize_fn, append_bias_term, accuracy_fn, macrof1_fn, get_n_classes
-
 
 def main(args):
     """
@@ -18,6 +18,7 @@ def main(args):
         args (Namespace): arguments that were parsed from the command line (see at the end 
                           of this file). Their value can be accessed as "args.argument".
     """
+
     ## 1. First, we load our data and flatten the images into vectors
     xtrain, xtest, ytrain = load_data(args.data)
     xtrain = xtrain.reshape(xtrain.shape[0], -1)
@@ -32,14 +33,8 @@ def main(args):
     xtrain = normalize_fn(xtrain, mean, std)
     xtest = normalize_fn(xtest, mean, std) 
     
-    # Appending the bias to the data
-
-    # xtrain = append_bias_term(xtrain)
-    # xtest = append_bias_term(xtest)
-
     # Make a validation set
     if not args.test:
-         print("Using test")
          validation_percentage = 0.2
          N = xtrain.shape[0]
          num_elements = int(N * validation_percentage)
@@ -65,39 +60,35 @@ def main(args):
     if args.use_pca:
         print("Using PCA")
         pca_obj = PCA(d=args.pca_d)
-        variance = pca_obj.find_principal_components(xtrain)
+        pca_obj.find_principal_components(xtrain)
         xtrain = pca_obj.reduce_dimension(xtrain)
         xtest = pca_obj.reduce_dimension(xtest)
         ### WRITE YOUR CODE HERE: use the PCA object to reduce the dimensionality of the data
 
-
     ## 3. Initialize the method you want to use.
-
-
-    # Neural Networks (MS2)
-
-    # Prepare the model (and data) for Pytorch
-    # Note: you might need to reshape the data depending on the network you use!
     n_classes = get_n_classes(ytrain)
-    dim = int(np.sqrt(xtrain.shape[1]))
+    N_train, D_train = xtrain.shape
+    N_test, D_test = xtest.shape
+    C = 1 # channels
+    dim = int(np.sqrt(D_train))
+
     if args.nn_type == "mlp":
-        model = MLP(input_size=xtrain.shape[1], n_classes=n_classes, hidden_layers=(512, 512)) ### WRITE YOUR CODE HERE
+        model = MLP(input_size=D_train, n_classes=n_classes, hidden_layers=[512, 512]) ### WRITE YOUR CODE HERE
 
     elif args.nn_type == "cnn":
-        xtrain = xtrain.reshape((xtrain.shape[0], 1, dim, dim))
-        xtest = xtest.reshape((xtest.shape[0], 1, dim, dim))
-        model = CNN(input_channels=1, n_classes=n_classes, filters=(6, 16), hidden_layers=(120, 84), image_size=28)
+        xtrain = xtrain.reshape((N_train, C, dim, dim)) # NCHW
+        xtest = xtest.reshape((N_test, C, dim, dim)) # NCHW
+        model = CNN(input_channels=C, n_classes=n_classes, filters=[32, 64], hidden_layers=[128], image_size=28)
 
     elif args.nn_type == "transformer":
-        xtrain = xtrain.reshape((xtrain.shape[0], 1, dim, dim))
-        xtest = xtest.reshape((xtest.shape[0], 1, dim, dim))
-        model = MyViT(chw=(1, dim, dim), n_patches=7, n_blocks=2, hidden_d=8, n_heads=2, out_d=n_classes)
+        xtrain = xtrain.reshape((N_train, C, dim, dim))
+        xtest = xtest.reshape((N_test, C, dim, dim))
+        model = MyViT(chw=(C, dim, dim), n_patches=7, n_blocks=2, hidden_d=8, n_heads=2, out_d=n_classes)
 
     summary(model)
 
     # Trainer object
     method_obj = Trainer(model=model, lr=args.lr, epochs=args.max_iters, batch_size=args.nn_batch_size)
-
 
     ## 4. Train and evaluate the method
 
@@ -112,7 +103,6 @@ def main(args):
     macrof1 = macrof1_fn(preds_train, ytrain)
     print(f"\nTrain set: accuracy = {acc:.3f}% - F1-score = {macrof1:.6f}")
 
-
     ## As there are no test dataset labels, check your model accuracy on validation dataset.
     # You can check your model performance on test set by submitting your test set predictions on the AIcrowd competition.
 
@@ -120,10 +110,11 @@ def main(args):
         acc = accuracy_fn(preds, ytest)
         macrof1 = macrof1_fn(preds, ytest)
         print(f"Validation set:  accuracy = {acc:.3f}% - F1-score = {macrof1:.6f}")
-
+    
+    if args.test:
+        np.save("predictions", preds) 
 
     ### WRITE YOUR CODE HERE if you want to add other outputs, visualization, etc.
-
 
 if __name__ == '__main__':
     # Definition of the arguments that can be given through the command line (terminal).
