@@ -5,8 +5,6 @@ from torch.utils.data import TensorDataset, DataLoader
 import numpy as np
 from ..utils import accuracy
 
-## MS2
-
 ##############################################################################################################################
 ##############################################################################################################################
 
@@ -136,7 +134,6 @@ class CNN(nn.Module):
 
         return x    
     
-
 ##############################################################################################################################
 ##############################################################################################################################
 
@@ -310,7 +307,6 @@ class MyViT(nn.Module):
                     result[i, j] = np.cos(i / (10000 ** ((j - 1) / d)))
         return result
 
-
 ##############################################################################################################################
 ##############################################################################################################################
 
@@ -386,11 +382,8 @@ class Trainer(object):
                   f'Loss: {loss:.4f} | '
                   f'Accuracy: {accuracy(logits, y):.2f}', end='')
     
-        # Print averaged training loss at the end of each epoch
-        # print(f'\nEpoch {ep + 1}/{self.epochs} | Average Training Loss: {train_loss:.4f}')
         print(f'\n{"-"*65}')
         
-
     def predict_torch(self, dataloader):
         """
         Predict the validation/test dataloader labels using the model.
@@ -463,3 +456,4 @@ class Trainer(object):
 
         # We return the labels after transforming them into numpy array.
         return pred_labels.cpu().numpy()
+    

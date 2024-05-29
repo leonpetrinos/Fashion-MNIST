@@ -1,7 +1,5 @@
 import numpy as np
 
-## MS2
-
 class PCA(object):
     """
     PCA dimensionality reduction class.
@@ -19,7 +17,6 @@ class PCA(object):
             d (int): dimensionality of the reduced space
         """
         self.d = d
-        
         # the mean of the training data (will be computed from the training data and saved to this variable)
         self.mean = None 
         # the principal components (will be computed from the training data and saved to this variable)
@@ -38,11 +35,6 @@ class PCA(object):
         Returns:
             exvar (float): explained variance of the kept dimensions (in percentage, i.e., in [0,100])
         """
-        ##
-        ###
-        #### WRITE YOUR CODE HERE!
-        ###
-        ##
 
         # mean of the data
         self.mean = np.mean(training_data, axis=0)
@@ -73,12 +65,7 @@ class PCA(object):
         Returns:
             data_reduced (array): reduced data of shape (N,d)
         """
-        ##
-        ###
-        #### WRITE YOUR CODE HERE!
-        ###
-        ##
-
+ 
         centered = data - self.mean
         return centered @ self.W
         
