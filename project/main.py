@@ -19,31 +19,25 @@ def main(args):
                           of this file). Their value can be accessed as "args.argument".
     """
 
-    ## 1. First, we load our data and flatten the images into vectors
+    ## We load our data and flatten the images into vectors
     xtrain, xtest, ytrain = load_data(args.data)
     xtrain = xtrain.reshape(xtrain.shape[0], -1)
     xtest = xtest.reshape(xtest.shape[0], -1)
-
-    ## 2. Then we must prepare it. This is were you can create a validation set,
-    #  normalize, add bias, etc.
 
     ## Normalizing the data
     mean = np.mean(xtrain, axis=0, keepdims=True)
     std = np.std(xtrain, axis=0, keepdims=True)
     xtrain = normalize_fn(xtrain, mean, std)
     xtest = normalize_fn(xtest, mean, std) 
-    
-    # Make a validation set
+
+    ## Make a validation set
     if not args.test:
          validation_percentage = 0.2
          N = xtrain.shape[0]
          num_elements = int(N * validation_percentage)
          indices = np.arange(N)
 
-         ### Shuffling the elements
-         np.random.permutation(indices)
-
-         ### validation indices & training_indices
+         np.random.shuffle(indices)
 
          valid_ind = indices[:num_elements]  # 20%
          train_ind = indices[num_elements:]  # 80%
@@ -51,70 +45,66 @@ def main(args):
          x_train_copy = np.copy(xtrain)
          y_train_copy = np.copy(ytrain)
 
-         xtrain, xtest = xtrain[train_ind], x_train_copy[valid_ind]
-         ytrain, ytest = ytrain[train_ind], y_train_copy[valid_ind]
+         xtrain, xval = xtrain[train_ind], x_train_copy[valid_ind]
+         ytrain, yval = ytrain[train_ind], y_train_copy[valid_ind]
 
-    ### WRITE YOUR CODE HERE to do any other data processing
-
-    # Dimensionality reduction (MS2)
-    if args.use_pca:
+    ## Dimensionality reduction (MS2)
+    if args.use_pca and args.nn_type == "mlp":
         print("Using PCA")
         pca_obj = PCA(d=args.pca_d)
         pca_obj.find_principal_components(xtrain)
         xtrain = pca_obj.reduce_dimension(xtrain)
         xtest = pca_obj.reduce_dimension(xtest)
-        ### WRITE YOUR CODE HERE: use the PCA object to reduce the dimensionality of the data
+        if not args.test:
+            xval = pca_obj.reduce_dimension(xval)
 
-    ## 3. Initialize the method you want to use.
+    ## Initialize the method 
     n_classes = get_n_classes(ytrain)
-    N_train, D_train = xtrain.shape
-    N_test, D_test = xtest.shape
     C = 1 # channels
-    dim = int(np.sqrt(D_train))
+    dim = int(np.sqrt(xtrain.shape[1]))
 
     if args.nn_type == "mlp":
-        model = MLP(input_size=D_train, n_classes=n_classes, hidden_layers=[512, 512]) ### WRITE YOUR CODE HERE
+        model = MLP(input_size=xtrain.shape[1], n_classes=n_classes, hidden_layers=[512, 512])
+        model.to(args.device)
 
     elif args.nn_type == "cnn":
-        xtrain = xtrain.reshape((N_train, C, dim, dim)) # NCHW
-        xtest = xtest.reshape((N_test, C, dim, dim)) # NCHW
+        xtrain = xtrain.reshape((xtrain.shape[0], C, dim, dim)) # NCHW
+        xtest = xtest.reshape((xtest.shape[0], C, dim, dim)) # NCHW
+        if not args.test:
+            xval = xval.reshape((xval.shape[0], C, dim, dim))
         model = CNN(input_channels=C, n_classes=n_classes, filters=[32, 64], hidden_layers=[128], image_size=28)
+        model.to(args.device)
 
     elif args.nn_type == "transformer":
-        xtrain = xtrain.reshape((N_train, C, dim, dim))
-        xtest = xtest.reshape((N_test, C, dim, dim))
-        model = MyViT(chw=(C, dim, dim), n_patches=7, n_blocks=2, hidden_d=8, n_heads=2, out_d=n_classes)
+        xtrain = xtrain.reshape((xtrain.shape[0], C, dim, dim))
+        xtest = xtest.reshape((xtest.shape[0], C, dim, dim))
+        if not args.test:
+            xval = xval.reshape((xval.shape[0], C, dim, dim))
+        model = MyViT(chw=(C, dim, dim), n_patches=7, n_blocks=4, hidden_d=8, n_heads=8, out_d=n_classes)
+        model.to(args.device)
 
     summary(model)
 
-    # Trainer object
-    method_obj = Trainer(model=model, lr=args.lr, epochs=args.max_iters, batch_size=args.nn_batch_size)
+    ## Train and evaluate the method
+    method_obj = Trainer(model=model, lr=args.lr, epochs=args.max_iters, batch_size=args.nn_batch_size, device=args.device)
 
-    ## 4. Train and evaluate the method
+    preds_train = method_obj.fit(xtrain, ytrain) # Fit on training data
 
-    # Fit (:=train) the method on the training data
-    preds_train = method_obj.fit(xtrain, ytrain)
-
-    # Predict on unseen data
-    preds = method_obj.predict(xtest)
-
-    ## Report results: performance on train and valid/test sets
+    ## Performance on training data
     acc = accuracy_fn(preds_train, ytrain)
     macrof1 = macrof1_fn(preds_train, ytrain)
     print(f"\nTrain set: accuracy = {acc:.3f}% - F1-score = {macrof1:.6f}")
 
-    ## As there are no test dataset labels, check your model accuracy on validation dataset.
-    # You can check your model performance on test set by submitting your test set predictions on the AIcrowd competition.
-
+    ## Performance on validation data
     if not args.test:
-        acc = accuracy_fn(preds, ytest)
-        macrof1 = macrof1_fn(preds, ytest)
+        preds_val = method_obj.predict(xval) # Predict on unseen data
+        acc = accuracy_fn(preds_val, yval)
+        macrof1 = macrof1_fn(preds_val, yval)
         print(f"Validation set:  accuracy = {acc:.3f}% - F1-score = {macrof1:.6f}")
-    
-    if args.test:
-        np.save("predictions", preds) 
-
-    ### WRITE YOUR CODE HERE if you want to add other outputs, visualization, etc.
+    else: 
+        preds_test = method_obj.predict(xtest)
+        np.save("predictions", preds_test)
+        
 
 if __name__ == '__main__':
     # Definition of the arguments that can be given through the command line (terminal).
@@ -143,3 +133,4 @@ if __name__ == '__main__':
     # which can be accessed as "args.data", for example.
     args = parser.parse_args()
     main(args)
+    

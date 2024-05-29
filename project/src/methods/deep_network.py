@@ -76,28 +76,32 @@ class CNN(nn.Module):
             n_classes (int): number of classes to predict
         """
         super().__init__()
-        in_channels = input_channels
-        conv_layers = []
-
-        final_size = image_size
-        for out_channels in filters:
-            conv_layers.append(nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)) # perform convolution
-            conv_layers.append(nn.ReLU()) # apply activation function
-            conv_layers.append(nn.MaxPool2d(kernel_size=2)) # apply max pooling reducing dimension 
-            in_channels = out_channels
-            final_size = final_size // 2 # final dimension divided by two because of max pooling 
-
-        self.convolution_model = nn.Sequential(*conv_layers) # convolution model is ready 
-
-        in_size = in_channels * final_size * final_size # input size is the flattened version of the convolutions output
-        mlp_layers = []
-        for out_size in hidden_layers:
-            mlp_layers.append(nn.Linear(in_size, out_size)) # add layer
-            mlp_layers.append(nn.ReLU()) # apply actvation function
-            in_size = out_size
-        mlp_layers.append(nn.Linear(in_size, n_classes))
-
-        self.mlp_model = nn.Sequential(*mlp_layers) # mlp model is ready
+        self.conv1 = nn.Conv2d(in_channels=input_channels, out_channels=64, kernel_size=3, padding=1)
+        self.bn1 = nn.BatchNorm2d(64)
+        self.conv2 = nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, padding=1)
+        self.bn2 = nn.BatchNorm2d(64)
+        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.dropout1 = nn.Dropout(p=0.5)
+        
+        self.conv3 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, padding=1)
+        self.bn3 = nn.BatchNorm2d(128)
+        self.conv4 = nn.Conv2d(in_channels=128, out_channels=128, kernel_size=3, padding=1)
+        self.bn4 = nn.BatchNorm2d(128)
+        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.dropout2 = nn.Dropout(p=0.5)
+        
+        self.conv5 = nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, padding=1)
+        self.bn5 = nn.BatchNorm2d(256)
+        self.conv6 = nn.Conv2d(in_channels=256, out_channels=256, kernel_size=3, padding=1)
+        self.bn6 = nn.BatchNorm2d(256)
+        self.pool3 = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.dropout3 = nn.Dropout(p=0.5)
+        
+        self.flatten = nn.Flatten()
+        self.fc1 = nn.Linear(256*3*3, 512)
+        self.bn7 = nn.BatchNorm1d(512)
+        self.dropout4 = nn.Dropout(p=0.5)
+        self.fc2 = nn.Linear(512, n_classes)
         
     def forward(self, x):
         """
@@ -110,11 +114,27 @@ class CNN(nn.Module):
                 Reminder: logits are value pre-softmax.
         """
 
-        x = self.convolution_model(x)
-        x = torch.flatten(x, 1)
-        x = self.mlp_model(x)
+        x = F.relu(self.bn1(self.conv1(x)))
+        x = F.relu(self.bn2(self.conv2(x)))
+        x = self.pool1(x)
+        x = self.dropout1(x)
+        
+        x = F.relu(self.bn3(self.conv3(x)))
+        x = F.relu(self.bn4(self.conv4(x)))
+        x = self.pool2(x)
+        x = self.dropout2(x)
+        
+        x = F.relu(self.bn5(self.conv5(x)))
+        x = F.relu(self.bn6(self.conv6(x)))
+        x = self.pool3(x)
+        x = self.dropout3(x)
+        
+        x = self.flatten(x)
+        x = F.relu(self.bn7(self.fc1(x)))
+        x = self.dropout4(x)
+        x = self.fc2(x)
 
-        return x
+        return x    
     
 
 ##############################################################################################################################
@@ -301,7 +321,7 @@ class Trainer(object):
     It will also serve as an interface between numpy and pytorch.
     """
 
-    def __init__(self, model, lr, epochs, batch_size):
+    def __init__(self, model, lr, epochs, batch_size, device='cpu'):
         """
         Initialize the trainer object for a given model.
 
@@ -315,10 +335,10 @@ class Trainer(object):
         self.epochs = epochs
         self.model = model
         self.batch_size = batch_size
+        self.device = device
 
         self.criterion = nn.CrossEntropyLoss()
-        if isinstance(model, MyViT): self.optimizer = torch.optim.Adam(params=model.parameters(), lr=lr) 
-        else: self.optimizer = torch.optim.SGD(params=model.parameters(), lr=lr)
+        self.optimizer = torch.optim.Adam(params=model.parameters(), lr=lr) 
 
     def train_all(self, dataloader):
         """
@@ -347,12 +367,9 @@ class Trainer(object):
         train_loss = 0.0
         for it, batch in enumerate(dataloader):
             # Load a batch, break it down in images and targets
-            x, y = batch
+            x, y = batch[0].to(self.device), batch[1].to(self.device)
             # Run forward pass
-            logits = self.model(x) 
-
-            # logits = F.softmax(logits, dim=1) ## NOT SURE ABOUT THIS
-            
+            logits = self.model(x)  
             # Compute loss 
             loss = self.criterion(logits, y.long()) 
             # Run backward pass.
@@ -367,7 +384,7 @@ class Trainer(object):
             print(f'\rEpoch {ep + 1}/{self.epochs} | '
                   f'Batch {it + 1}/{len(dataloader)} | '
                   f'Loss: {loss:.4f} | '
-                  f'Accuracy: {accuracy(logits, y):.2f}%', end='')
+                  f'Accuracy: {accuracy(logits, y):.2f}', end='')
     
         # Print averaged training loss at the end of each epoch
         # print(f'\nEpoch {ep + 1}/{self.epochs} | Average Training Loss: {train_loss:.4f}')
@@ -397,7 +414,8 @@ class Trainer(object):
 
         with torch.no_grad():
             for it, batch in enumerate(dataloader):
-                logits = self.model(batch[0])
+                x = batch[0].to(self.device)
+                logits = self.model(x)
                 preds = torch.argmax(logits, dim=1)
                 all_preds.append(preds)
 
