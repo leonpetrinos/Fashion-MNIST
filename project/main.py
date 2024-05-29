@@ -66,6 +66,7 @@ def main(args):
     if args.nn_type == "mlp":
         model = MLP(input_size=xtrain.shape[1], n_classes=n_classes, hidden_layers=[512, 512])
         model.to(args.device)
+        method_obj = Trainer(model=model, lr=args.lr, epochs=args.max_iters, batch_size=args.nn_batch_size, device=args.device)
 
     elif args.nn_type == "cnn":
         xtrain = xtrain.reshape((xtrain.shape[0], C, dim, dim)) # NCHW
@@ -74,6 +75,7 @@ def main(args):
             xval = xval.reshape((xval.shape[0], C, dim, dim))
         model = CNN(input_channels=C, n_classes=n_classes, filters=[32, 64], hidden_layers=[128], image_size=28)
         model.to(args.device)
+        method_obj = Trainer(model=model, lr=args.lr, epochs=args.max_iters, batch_size=args.nn_batch_size, device=args.device)
 
     elif args.nn_type == "transformer":
         xtrain = xtrain.reshape((xtrain.shape[0], C, dim, dim))
@@ -81,13 +83,12 @@ def main(args):
         if not args.test:
             xval = xval.reshape((xval.shape[0], C, dim, dim))
         model = MyViT(chw=(C, dim, dim), n_patches=7, n_blocks=4, hidden_d=8, n_heads=8, out_d=n_classes)
-        model.to(args.device)
+        model.to('cpu')
+        method_obj = Trainer(model=model, lr=args.lr, epochs=args.max_iters, batch_size=args.nn_batch_size, device='cpu')
 
     summary(model)
 
     ## Train and evaluate the method
-    method_obj = Trainer(model=model, lr=args.lr, epochs=args.max_iters, batch_size=args.nn_batch_size, device=args.device)
-
     preds_train = method_obj.fit(xtrain, ytrain) # Fit on training data
 
     ## Performance on training data
