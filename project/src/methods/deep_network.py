@@ -34,6 +34,8 @@ class MLP(nn.Module):
         for out_size in hidden_layers:
             layers.append(nn.Linear(in_size, out_size)) # add layer
             layers.append(nn.ReLU())
+            layers.append(nn.BatchNorm1d(out_size))
+            layers.append(nn.Dropout(p=0.2))
             in_size = out_size
             
         layers.append(nn.Linear(in_size, n_classes)) # append the final layer 
@@ -62,7 +64,7 @@ class CNN(nn.Module):
     It should use at least one convolutional layer.
     """
 
-    def __init__(self, input_channels, n_classes, filters=[6, 16], hidden_layers=[120, 84], image_size=28):
+    def __init__(self, input_channels, n_classes):
         """
         Initialize the network.
         
@@ -181,7 +183,7 @@ class MyMSA(nn.Module):
         return torch.cat([torch.unsqueeze(r, dim=0) for r in result])
 
 class MyViTBlock(nn.Module):
-    def __init__(self, hidden_d, n_heads, mlp_ratio=4):
+    def __init__(self, hidden_d, n_heads, mlp_ratio=4, dropout_rate=0.3):
         super().__init__()
         self.hidden_d = hidden_d
         self.n_heads = n_heads
@@ -192,6 +194,7 @@ class MyViTBlock(nn.Module):
         self.mlp = nn.Sequential(
             nn.Linear(hidden_d, mlp_ratio * hidden_d),
             nn.GELU(),
+            nn.Dropout(dropout_rate),
             nn.Linear(mlp_ratio * hidden_d, hidden_d)
         )
 

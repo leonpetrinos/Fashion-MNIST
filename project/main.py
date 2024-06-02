@@ -8,6 +8,7 @@ from src.data import load_data
 from src.methods.pca import PCA
 from src.methods.deep_network import MLP, CNN, Trainer, MyViT, MyViTBlock
 from src.utils import normalize_fn, append_bias_term, accuracy_fn, macrof1_fn, get_n_classes
+import matplotlib.pyplot as plt
 
 def main(args):
     """
@@ -64,7 +65,7 @@ def main(args):
     dim = int(np.sqrt(xtrain.shape[1]))
 
     if args.nn_type == "mlp":
-        model = MLP(input_size=xtrain.shape[1], n_classes=n_classes, hidden_layers=[512, 512])
+        model = MLP(input_size=xtrain.shape[1], n_classes=n_classes, hidden_layers=[512, 256, 128])
         model.to(args.device)
         method_obj = Trainer(model=model, lr=args.lr, epochs=args.max_iters, batch_size=args.nn_batch_size, device=args.device)
 
@@ -73,7 +74,7 @@ def main(args):
         xtest = xtest.reshape((xtest.shape[0], C, dim, dim)) # NCHW
         if not args.test:
             xval = xval.reshape((xval.shape[0], C, dim, dim))
-        model = CNN(input_channels=C, n_classes=n_classes, filters=[32, 64], hidden_layers=[128], image_size=28)
+        model = CNN(input_channels=C, n_classes=n_classes)
         model.to(args.device)
         method_obj = Trainer(model=model, lr=args.lr, epochs=args.max_iters, batch_size=args.nn_batch_size, device=args.device)
 
@@ -82,9 +83,9 @@ def main(args):
         xtest = xtest.reshape((xtest.shape[0], C, dim, dim))
         if not args.test:
             xval = xval.reshape((xval.shape[0], C, dim, dim))
-        model = MyViT(chw=(C, dim, dim), n_patches=7, n_blocks=4, hidden_d=8, n_heads=8, out_d=n_classes)
+        model = MyViT(chw=(C, dim, dim), n_patches=7, n_blocks=10, hidden_d=64, n_heads=8, out_d=n_classes)
         model.to('cpu')
-        method_obj = Trainer(model=model, lr=args.lr, epochs=args.max_iters, batch_size=args.nn_batch_size, device='cpu')
+        method_obj = Trainer(model=model, lr=3e-4, epochs=5, batch_size=128, device='cpu')
 
     summary(model)
 
@@ -105,7 +106,99 @@ def main(args):
     else: 
         preds_test = method_obj.predict(xtest)
         np.save("predictions", preds_test)
-        
+
+def plot_mlp(xtrain, ytrain, xval, yval, input_size, n_classes, hidden_layers, params, args):
+    AccuracyTrain_PCA = []
+    AccuracyTest_PCA = []
+    AccuracyTrain = []
+    AccuracyTest = []
+
+    for param in params:       
+        model = MLP(input_size, n_classes, hidden_layers)     
+        method_obj = Trainer(model, lr=param, epochs=args.max_iters, batch_size=args.nn_batch_size)
+        trainPrediction = method_obj.fit(xtrain, ytrain)
+        AccuracyTrain.append(accuracy_fn(trainPrediction, ytrain))
+        testPrediction = method_obj.predict(xval)
+        AccuracyTest.append(accuracy_fn(testPrediction, yval))
+
+    if not args.use_pca:
+      print("NOW USING PCA")
+      pca_obj = PCA(d=args.pca_d)
+      pca_obj.find_principal_components(xtrain)
+      xtrain_pca = pca_obj.reduce_dimension(xtrain)
+      xtest_pca = pca_obj.reduce_dimension(xval)
+      input_size_pca = xtrain_pca.shape[1]
+     
+      for param in params:
+        model = MLP(input_size_pca, n_classes, hidden_layers)      
+        method_obj = Trainer(model, lr=param, epochs=args.max_iters, batch_size=args.nn_batch_size)
+        trainPredictions = method_obj.fit(xtrain_pca, ytrain)
+        AccuracyTrain_PCA.append(accuracy_fn(trainPredictions, ytrain))
+        testPrediction = method_obj.predict(xtest_pca)
+        AccuracyTest_PCA.append(accuracy_fn(testPrediction, yval))
+
+    plt.semilogx(params, AccuracyTrain, 'r', label="Train_data_NO_PCA")
+    plt.semilogx(params, AccuracyTest, 'b', label="Test_data_NO_PCA")
+    plt.semilogx(params, AccuracyTrain_PCA, 'g', label="Train_data_PCA")
+    plt.semilogx(params, AccuracyTest_PCA, 'y', label="Test_data_PCA")
+    plt.xlabel('Learning Rate')
+    plt.ylabel('Accuracy')
+    plt.title('Accuracy vs Learning Rate')
+    plt.legend()
+    plt.show()
+
+def plot_transformer(xtrain, ytrain, xval, yval, chw, n_patches, hidden_d, n_heads, out_d, params, args):
+     AccTrain = []
+     AccTest = []
+
+     for param in params:  
+        model = MyViT(chw, n_patches, param, hidden_d, n_heads, out_d)
+        method_obj = Trainer(model, lr=args.lr, epochs=args.max_iters, batch_size=args.nn_batch_size)
+        trainPreds = method_obj.fit(xtrain, ytrain)
+        AccTrain.append(accuracy_fn(trainPreds, ytrain))
+        testPreds = method_obj.predict(xval)
+        AccTest.append(accuracy_fn(testPreds, yval))
+
+     plt.plot(params, AccTrain, 'r', label="Train data")
+     plt.plot(params, AccTest, 'b', label="Test data")
+     plt.xlabel('Number of blocks')
+     plt.ylabel('Accuracy')
+     plt.title('Accuracy vs Number of blocks')
+     plt.legend()
+     plt.show()
+
+def plot_cnn(n_classes, xtrain, ytrain, xval, yval):
+    train_accuracy, val_accuracy = [], []
+    train_f1, val_f1 = [], []
+    learning_rates = [1e-4, 1e-3, 1e-2]
+    ep = 100
+    for lr in learning_rates:
+        print(f"lr: {lr}")
+        model = CNN(input_channels=1, n_classes=n_classes)
+        model.to('mps')
+        method_obj = Trainer(model=model, lr=lr, epochs=ep, batch_size=args.nn_batch_size, device='mps')
+        # Get training accuracy
+        preds_train = method_obj.fit(xtrain, ytrain)
+        acc = accuracy_fn(preds_train, ytrain)
+        train_accuracy.append(acc)
+        macrof1 = macrof1_fn(preds_train, ytrain)
+        train_f1.append(macrof1)
+        # Get validation accuracy
+        preds_val = method_obj.predict(xval)
+        acc = accuracy_fn(preds_val, yval)
+        val_accuracy.append(acc)
+        macrof1 = macrof1_fn(preds_val, yval)
+        val_f1.append(macrof1)
+    
+    plt.figure(figsize=(10, 6))
+    plt.plot(learning_rates, train_accuracy, label='Training Accuracy', marker='o')
+    plt.plot(learning_rates, val_accuracy, label='Validation Accuracy', marker='o')
+    plt.xscale('log')
+    plt.xlabel('Learning Rate')
+    plt.ylabel('Accuracy')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
 
 if __name__ == '__main__':
     # Definition of the arguments that can be given through the command line (terminal).
