@@ -25,7 +25,7 @@ python main.py --data ../dataset --nn_type cnn --lr 1e-3 --max_iters 200
 
 #### ViT
 ```bash
-python main.py --data ../dataset --nn_type transformer --lr 2e-4 --max_iters 30
+python main.py --data ../dataset --nn_type transformer --lr 2e-4 --max_iters 5
 ```
 
 #### Additional Arguments
